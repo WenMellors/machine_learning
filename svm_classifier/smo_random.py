@@ -15,7 +15,7 @@ scal_x = StandardScaler().fit_transform(train_x)
 
 sk = StratifiedKFold(n_splits=5)
 eval_predict = np.zeros((scal_x.shape[0], 1))
-clf = FinalSMO(tol=0.1, max_iter=3000, random_seed=0, verbose=500)
+clf = FinalSMO(tol=0.1, max_iter=5000, random_seed=0, verbose=500)
 clf.fit(scal_x, np.array(train_y).reshape((train_x.shape[0], 1)))
 eval_predict = clf.predict(scal_x)
 
