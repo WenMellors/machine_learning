@@ -184,7 +184,6 @@ class FinalSMO:
         self.bestIter = n_iter
       if self.verbose != 0 and n_iter % self.verbose == 0:
         print('finish {0}: best iter {3} best target value {1} and {2} point not match KKT'.format(n_iter, float(self.bestTargetValue), self.bestNotMatchKKT, self.bestIter))
-    
     print("best targetValue {0} best not not KKTCnt {1} best Iter {2}".format(float(self.bestTargetValue), self.bestNotMatchKKT, self.bestIter))
     print('finish')
     self.b = self.bestB # rollback to best

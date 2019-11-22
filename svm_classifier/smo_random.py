@@ -9,13 +9,13 @@ data = pd.read_csv('./data/svm_training_set.csv')
 
 ratio_feature = ['x1', 'x3', 'x10', 'x11', 'x12']
 
-train_y = data['label'].iloc[0:500]
-train_x = data.drop(['label'], axis=1)[ratio_feature].iloc[0:500]
+train_y = data['label']
+train_x = data.drop(['label'], axis=1)[ratio_feature]
 scal_x = StandardScaler().fit_transform(train_x)
 
 sk = StratifiedKFold(n_splits=5)
 eval_predict = np.zeros((scal_x.shape[0], 1))
-clf = FinalSMO(tol=0.1, max_iter=5000, random_seed=0, verbose=500)
+clf = FinalSMO(tol=0.1, max_iter=2000, random_seed=0, verbose=100)
 clf.fit(scal_x, np.array(train_y).reshape((train_x.shape[0], 1)))
 eval_predict = clf.predict(scal_x)
 
