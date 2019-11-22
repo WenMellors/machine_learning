@@ -1,13 +1,13 @@
 import numpy as np
 
 class FinalSMO:
-  def __init__(self, C = 1.0, tol = 0.0001, max_iter = 1000, verbose = 0, random_seed = 0, KKTdelta = 0.01):
+  def __init__(self, C = 1.0, tol = 0.0001, max_iter = 1000, verbose = 0, random_seed = 0, KKTdelta = 0.01, w=None, b = 0):
     self.C = C # penalty parameter C of the error term.
     self.tol = tol # tolerance for stopping criteria.
     self.max_iter = max_iter # max iteration
     self.E = None # the difference between predict_y and y
-    self.w = None
-    self.b = 0 # wx + b = 0
+    self.w = w
+    self.b = b # wx + b = 0
     self.verbose = verbose
     self.random = np.random.RandomState(seed = random_seed)
     self.KKTdelta = KKTdelta # we accept KKTdelta * n_smaple not match KKT
@@ -18,7 +18,9 @@ class FinalSMO:
     self.bestB = 0
     self.bestTargetValue = 0
     self.bestNotMatchKKT = 0
+    self.bestA = None
     self.bestIter = 0
+    self.bestE = None
     self.notMatchKKT = 0
   
   def k(self, x, z):
@@ -88,9 +90,11 @@ class FinalSMO:
     n_iter = 0
     self.w = np.zeros((1, X.shape[1])) # init is 0
     self.E = np.zeros((X.shape[0], 1))
+    self.bestA = np.copy(a)
+    self.bestE = np.copy(self.E)
     self.updateE(X, y)
     self.checkStop(a, y)
-    self.bestNotMatchKKT = self.notMatchKKT
+    self.bestNotMatchKKT = int(self.notMatchKKT)
     print('start')
     while n_iter < self.max_iter:
       # random select a not match KKT point
@@ -107,12 +111,12 @@ class FinalSMO:
             second_i = self.random.choice(np.where(self.E == np.min(self.E))[0])
           else:
             second_i = self.random.choice(np.where(self.E == np.max(self.E))[0])
-          while first_i == second_i and np.linalg.norm(X[first_i] - X[second_i]) == 0:
+          while first_i == second_i or np.linalg.norm(X[first_i] - X[second_i]) == 0:
             second_i = self.random.randint(0, a.shape[0]) # select a random a2
         else:
           # fail to inspire
           second_i = self.random.randint(0, a.shape[0])
-          while first_i == second_i and np.linalg.norm(X[first_i] - X[second_i]) == 0:
+          while first_i == second_i or np.linalg.norm(X[first_i] - X[second_i]) == 0:
             second_i = self.random.randint(0, a.shape[0]) # select a random a2
         # calculate a2_newunc
         a2_newunc = a[second_i] + y[second_i] * (self.E[first_i] - self.E[second_i]) / np.linalg.norm(X[first_i] - X[second_i])
@@ -177,13 +181,15 @@ class FinalSMO:
         return
       elif (self.bestNotMatchKKT > self.notMatchKKT or self.notMatchKKT < X.shape[0] * self.KKTdelta) and self.targetValue - self.bestTargetValue + self.tol > 0:
         # good improve
-        self.bestW = self.w
-        self.bestB = self.b
-        self.bestNotMatchKKT = self.notMatchKKT
-        self.bestTargetValue = self.targetValue
+        self.bestW = np.copy(self.w)
+        self.bestB = np.copy(self.b)
+        self.bestNotMatchKKT = int(self.notMatchKKT)
+        self.bestTargetValue = float(self.targetValue)
         self.bestIter = n_iter
+        self.bestA = np.copy(a)
       if self.verbose != 0 and n_iter % self.verbose == 0:
-        print('finish {0}: best iter {3} best target value {1} and {2} point not match KKT'.format(n_iter, float(self.bestTargetValue), self.bestNotMatchKKT, self.bestIter))
+        print('finish {0}: best iter {3} best target value {1} and {2} point not match KKT'.format(n_iter, self.bestTargetValue, self.bestNotMatchKKT, self.bestIter))
+
     print("best targetValue {0} best not not KKTCnt {1} best Iter {2}".format(float(self.bestTargetValue), self.bestNotMatchKKT, self.bestIter))
     print('finish')
     self.b = self.bestB # rollback to best
@@ -205,4 +211,7 @@ class FinalSMO:
       result[i] = 1 if self.g(X[i]) > 0 else -1
     return result
 
-      
+  def storeWBA(self):
+    np.savetxt('final_smo_b.txt', self.b)
+    np.savetxt('final_smo_w.txt', self.w)
+    np.savetxt('final_smo_w.txt', self.bestA)
