@@ -1,4 +1,5 @@
 /svm_classifier/libsvm
+/svm_classifier/source_code
 /incoming_predict
 /syntax_check
 /.vscode

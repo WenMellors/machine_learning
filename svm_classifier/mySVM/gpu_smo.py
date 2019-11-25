@@ -1,6 +1,6 @@
 import numpy as np
-
-class FinalSMO:
+import cupy as cp
+class GPUSMO:
   def __init__(self, C = 1.0, tol = 0.0001, max_iter = 1000, verbose = 0, random_seed = 0, KKTdelta = 0.01, w=None, b = 0):
     self.C = C # penalty parameter C of the error term.
     self.tol = tol # tolerance for stopping criteria.
@@ -37,7 +37,7 @@ class FinalSMO:
     """
     calculate w
     """
-    self.w = np.dot(np.array(a*y).reshape(1, X.shape[0]), X)
+    self.w = cp.asnumpy(cp.dot(cp.array(a*y).reshape(1, X.shape[0]), cp.array(X)))
 
   def updateE(self, X, y):
     #for i in range(X.shape[0]):
@@ -77,7 +77,6 @@ class FinalSMO:
       return False
     else:
       return True
-
 
   def fit(self, X, y):
     """
@@ -144,10 +143,10 @@ class FinalSMO:
         # if data is too big re calculate targetValue is not accepted
         a1_diff = a1_old - a1_new
         a2_diff = a2_old - a2_new
-        temp = np.sum(a*y*X, axis=0)
+        temp1 = cp.sum(cp.multiply(cp.multiply(cp.asarray(a), cp.asarray(y)), cp.asarray(X)), axis=0) # accelerate
         self.targetValue = self.targetValue - a1_diff - a2_diff + (a1_old**2 - a1_new**2)*(np.dot(X[first_i].T, X[first_i]))*(y[first_i]**2)/2 + (
           (a2_old**2 - a2_new**2)*np.dot(X[second_i].T, X[second_i])*(y[second_i]**2)/2) + np.dot(X[first_i].T, X[second_i])*y[first_i]*y[second_i]*(a1_old*a2_old - a1_new*a2_new) + (
-          y[first_i]*a1_diff*np.dot(X[first_i], temp)) + y[second_i]*a2_diff*np.dot(X[second_i], temp)
+          y[first_i]*a1_diff*float(cp.dot(cp.asarray(X[first_i]), temp1))) + y[second_i]*a2_diff*float(cp.dot(cp.asarray(X[second_i]), temp1))
         a[first_i] = a1_new
         a[second_i] = a2_new
         if self.targetValue <= oldValue - self.tol or a2_new == a2_old:

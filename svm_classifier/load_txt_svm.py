@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import sklearn.svm as svm
+from mySVM import SMO, RandomSMO, FinalSMO, GPUSMO
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import StratifiedKFold
@@ -22,14 +22,11 @@ one_hot_nominal = pd.DataFrame(enc.fit_transform(select_nominal).toarray())
 train_x = pd.concat([pd.DataFrame(scal_x, columns=ratio_feature), one_hot_nominal], axis=1)
 
 sk = StratifiedKFold(n_splits=5)
-eval_predict = np.zeros((train_x.shape[0], 1))
-for train_index, eval_index in sk.split(train_x, train_y):
-  clf = svm.LinearSVC(random_state=0, max_iter=5000)
-  train_set = train_x.iloc[train_index]
-  eval_set = train_x.iloc[eval_index]
-  train_label = train_y.iloc[train_index]
-  clf.fit(train_set, train_label)
-  eval_predict[eval_index] = clf.predict(eval_set).reshape((eval_index.shape[0] ,1))
+eval_predict = np.zeros((scal_x.shape[0], 1))
+w = np.loadtxt('final_smo_w.txt')
+b = np.loadtxt('final_smo_b.txt')
+clf = GPUSMO(tol=0.1, max_iter=1000, random_seed=0, verbose=100, w=w, b=b)
+eval_predict = clf.predict(np.array(train_x))
 
+print('ac is', accuracy_score(train_y, eval_predict))
 print('f1 score is ', f1_score(train_y, eval_predict))
-print('ac ', accuracy_score(train_y, eval_predict))
