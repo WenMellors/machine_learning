@@ -1,5 +1,6 @@
 /svm_classifier/libsvm
 /svm_classifier/source_code
+/svm_classifier/mySVM/__pycache__
 /incoming_predict
 /syntax_check
 /.vscode

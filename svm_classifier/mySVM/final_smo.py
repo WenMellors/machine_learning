@@ -212,7 +212,6 @@ class FinalSMO:
       result[i] = 1 if self.g(X[i]) > 0 else -1
     return result
 
-  def storeWBA(self):
+  def storeWB(self):
     np.savetxt('final_smo_b.txt', self.b)
     np.savetxt('final_smo_w.txt', self.w)
-    np.savetxt('final_smo_a.txt', self.bestA)

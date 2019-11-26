@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from mySVM import SMO, RandomSMO, FinalSMO, GPUSMO
+from mySVM import FinalSMO, GPUSMO
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import StratifiedKFold
@@ -25,8 +25,10 @@ sk = StratifiedKFold(n_splits=5)
 eval_predict = np.zeros((scal_x.shape[0], 1))
 w = np.loadtxt('final_smo_w.txt')
 b = np.loadtxt('final_smo_b.txt')
-clf = GPUSMO(tol=0.1, max_iter=1000, random_seed=0, verbose=100, w=w, b=b)
+clf = FinalSMO(tol=0.1, max_iter=1000, random_seed=0, verbose=100, w=w, b=b)
 eval_predict = clf.predict(np.array(train_x))
 
+predict = pd.DataFrame(eval_predict.astype(int), columns=['label'])
+predict.to_csv('./data/preditc.csv', index=False)
 print('ac is', accuracy_score(train_y, eval_predict))
 print('f1 score is ', f1_score(train_y, eval_predict))
