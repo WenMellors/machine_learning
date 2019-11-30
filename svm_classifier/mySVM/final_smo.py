@@ -43,7 +43,8 @@ class FinalSMO:
     #for i in range(X.shape[0]):
     #  self.E[i] = self.g(X[i]) - y[i]
     # use np to accelerate
-    self.E = np.apply_along_axis(lambda x: self.g(x), axis=1, arr=X) - y
+    # self.E = np.apply_along_axis(lambda x: self.g(x), axis=1, arr=X) - y
+    self.E = np.dot(X, self.w.T) + self.b - y
 
   def g(self, x):
     """
@@ -95,68 +96,73 @@ class FinalSMO:
     self.updateE(X, y)
     self.checkStop(a, y)
     self.bestNotMatchKKT = int(self.notMatchKKT)
+    temp = np.sum(a*y*X, axis=0)
     print('start')
     while n_iter < self.max_iter:
       # random select a not match KKT point
       # many we select a1 a2 cannot improve the score,so just random choose a1 a2
-      reselect_time = 0
       while True:
         # print('reselect time {} ',format(reselect_time), a)
         if len(self.failKKTBorderList) == 0:
           first_i = self.random.choice(self.failKKTList) # select a1 from fail KKT List not border
         else:
           first_i = self.random.choice(self.failKKTBorderList)
-        if reselect_time < 3:
-          if self.E[first_i] > 0:
-            second_i = self.random.choice(np.where(self.E == np.min(self.E))[0])
+        reselect_time = 0
+        success = False
+        while reselect_time < 10:
+          if reselect_time < 3:
+            if self.E[first_i] > 0:
+              second_i = self.random.choice(np.where(self.E == np.min(self.E))[0])
+            else:
+              second_i = self.random.choice(np.where(self.E == np.max(self.E))[0])
+            while first_i == second_i or np.linalg.norm(X[first_i] - X[second_i]) == 0:
+              second_i = self.random.randint(0, a.shape[0]) # select a random a2
           else:
-            second_i = self.random.choice(np.where(self.E == np.max(self.E))[0])
-          while first_i == second_i or np.linalg.norm(X[first_i] - X[second_i]) == 0:
-            second_i = self.random.randint(0, a.shape[0]) # select a random a2
-        else:
-          # fail to inspire
-          second_i = self.random.randint(0, a.shape[0])
-          while first_i == second_i or np.linalg.norm(X[first_i] - X[second_i]) == 0:
-            second_i = self.random.randint(0, a.shape[0]) # select a random a2
-        # calculate a2_newunc
-        a2_newunc = a[second_i] + y[second_i] * (self.E[first_i] - self.E[second_i]) / np.linalg.norm(X[first_i] - X[second_i])
-        # print('a2_newunc ', a2_newunc)
-        # calculate H and L
-        if y[first_i] == y[second_i]:
-          L = max(0, a[second_i] + a[first_i] - self.C)
-          H = min(self.C, a[second_i] + a[first_i])
-        else:
-          L = max(0, a[second_i] - a[first_i])
-          H = min(self.C, self.C + a[second_i] - a[first_i])
-        # calculate a2_new
-        if a2_newunc > H:
-          a2_new = H
-        elif a2_newunc < L:
-          a2_new = L
-        else:
-          a2_new = a2_newunc
-        a1_new = a[first_i] +  y[first_i] * y[second_i] *(a[second_i] - a2_new)
-        oldValue = self.targetValue
-        a1_old = float(a[first_i])
-        a2_old = float(a[second_i]) # TODO:solve this numpy bug
-        a[first_i] = 0
-        a[second_i] = 0
-        # if data is too big re calculate targetValue is not accepted
-        a1_diff = a1_old - a1_new
-        a2_diff = a2_old - a2_new
-        temp = np.sum(a*y*X, axis=0)
-        self.targetValue = self.targetValue - a1_diff - a2_diff + (a1_old**2 - a1_new**2)*(np.dot(X[first_i].T, X[first_i]))*(y[first_i]**2)/2 + (
-          (a2_old**2 - a2_new**2)*np.dot(X[second_i].T, X[second_i])*(y[second_i]**2)/2) + np.dot(X[first_i].T, X[second_i])*y[first_i]*y[second_i]*(a1_old*a2_old - a1_new*a2_new) + (
-          y[first_i]*a1_diff*np.dot(X[first_i], temp)) + y[second_i]*a2_diff*np.dot(X[second_i], temp)
-        a[first_i] = a1_new
-        a[second_i] = a2_new
-        if self.targetValue <= oldValue - self.tol or a2_new == a2_old:
-          a[first_i] = a1_old
-          a[second_i] = a2_old
-          reselect_time += 1
-          self.targetValue = oldValue
-          continue
-        else:
+            # fail to inspire
+            second_i = self.random.randint(0, a.shape[0])
+            while first_i == second_i or np.linalg.norm(X[first_i] - X[second_i]) == 0:
+              second_i = self.random.randint(0, a.shape[0]) # select a random a2
+          # calculate a2_newunc
+          a2_newunc = a[second_i] + y[second_i] * (self.E[first_i] - self.E[second_i]) / np.linalg.norm(X[first_i] - X[second_i])
+          # print('a2_newunc ', a2_newunc)
+          # calculate H and L
+          if y[first_i] == y[second_i]:
+            L = max(0, a[second_i] + a[first_i] - self.C)
+            H = min(self.C, a[second_i] + a[first_i])
+          else:
+            L = max(0, a[second_i] - a[first_i])
+            H = min(self.C, self.C + a[second_i] - a[first_i])
+          # calculate a2_new
+          if a2_newunc > H:
+            a2_new = H
+          elif a2_newunc < L:
+            a2_new = L
+          else:
+            a2_new = a2_newunc
+          a1_new = a[first_i] +  y[first_i] * y[second_i] *(a[second_i] - a2_new)
+          oldValue = self.targetValue
+          a1_old = float(a[first_i])
+          a2_old = float(a[second_i]) # TODO:solve this numpy bug
+          a[first_i] = 0
+          a[second_i] = 0
+          # if data is too big re calculate targetValue is not accepted
+          a1_diff = a1_old - a1_new
+          a2_diff = a2_old - a2_new
+          self.targetValue = self.targetValue - a1_diff - a2_diff + (a1_old**2 - a1_new**2)*(np.dot(X[first_i].T, X[first_i]))*(y[first_i]**2)/2 + (
+            (a2_old**2 - a2_new**2)*np.dot(X[second_i].T, X[second_i])*(y[second_i]**2)/2) + np.dot(X[first_i].T, X[second_i])*y[first_i]*y[second_i]*(a1_old*a2_old - a1_new*a2_new) + (
+            y[first_i]*a1_diff*np.dot(X[first_i], temp)) + y[second_i]*a2_diff*np.dot(X[second_i], temp)
+          a[first_i] = a1_new
+          a[second_i] = a2_new
+          if self.targetValue <= oldValue - self.tol or a2_new == a2_old:
+            a[first_i] = a1_old
+            a[second_i] = a2_old
+            reselect_time += 1
+            self.targetValue = oldValue
+            continue
+          else:
+            success = True
+            break
+        if success:
           break
       
       a1_new = a[first_i] +  y[first_i] * y[second_i] *(a[second_i] - a2_new)
@@ -180,7 +186,7 @@ class FinalSMO:
       if self.checkStop(a, y):
         print("converge {0} not point not match KKT".format(n_iter))
         return
-      elif (self.bestNotMatchKKT > self.notMatchKKT or self.notMatchKKT < X.shape[0] * self.KKTdelta) and self.targetValue - self.bestTargetValue + self.tol > 0:
+      elif (self.bestNotMatchKKT >= self.notMatchKKT or self.notMatchKKT < X.shape[0] * self.KKTdelta) and self.targetValue - self.bestTargetValue + self.tol > 0:
         # good improve
         self.bestW = np.copy(self.w)
         self.bestB = np.copy(self.b)
