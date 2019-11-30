@@ -6,3 +6,4 @@
 /debug
 *.zip
 /incoming_predict/data/submission.csv
+/incoming_predict/mySVM/__pycache__
