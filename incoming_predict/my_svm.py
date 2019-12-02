@@ -18,7 +18,6 @@ nominal_feature = ['workclass', 'education', 'marital-status', 'occupation', 're
 train_label = data[is_train]['income']
 ratio_data = data[ratio_feature]
 ratio_data = pd.DataFrame(StandardScaler().fit_transform(ratio_data), columns=ratio_feature)
-# ratio_data = ratio_data * 100
 # label encode
 nominal_data = data[nominal_feature]
 encode_nominal = pd.DataFrame()

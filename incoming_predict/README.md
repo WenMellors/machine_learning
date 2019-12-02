@@ -1,16 +1,125 @@
-### 特征分析
+## 数据预处理
 
-##### 标称特征
+预处理总体分为两个部分，对于比率特征（连续值）进行标准化以及对于标称特征进行独热码转换。对比率特征进行标准化是由于数据集中各个比率特征的取值范围差距比较大，age 大概在 0 - 100，fnlwgt 却是 $10^6$ 量级的，所以通过标准化，来进行特征无量纲化。因为数据集比较小，而且自己又不过分关心效率，所以对所有标称特征直接都独热码。对应实现的代码如下：
 
-workclass, education, marital-status, occupation, relationship, race, sex, native-country
+```python
+ratio_data = data[ratio_feature] # 从数据集中抽取比率特征
+ratio_data = pd.DataFrame(StandardScaler().fit_transform(ratio_data), columns=ratio_feature) # 特征标准化, （特征 - 特征均值）/ 标准差
+# label encode
+nominal_data = data[nominal_feature] # 从数据集中抽取标称特征
+encode_nominal = pd.DataFrame()
+for i in nominal_feature:
+  encode_nominal[i] = LabelEncoder().fit_transform(nominal_data[i]) # 对标称特征进行编码
+# one hot encode
+enc = OneHotEncoder(categories='auto')
+one_hot_nominal = pd.DataFrame(enc.fit_transform(encode_nominal).toarray()) # 对转成数字的标称特征进行独热码编码
+```
 
-workclass, occupation, native-country: 有缺失值 ？
+## SVM 实现
 
-##### 比率特征
+#### 基于 SMO 实现的 SVM 二分类器
 
-fnlwgt, education-num, capital gain, capital loss, hours-per-week, age
+SVM 对应的代码为 mySVM 文件夹下的 SMO 模型实现以及调用该模型进行预测的脚本 my_svm.py。
 
-#### SVM 分类实现
+##### SMO 算法描述如下：
 
-0.84
+输入：训练数据集 $T = \{(x_1, y_1), (x_2, y_2), ...., (x_N, y_N)\}$ ，其中 x 为 n 维特征向量，y 为 1 或者 -1，算法精度 $\epsilon $ 。
+
+输出：SVM 目标函数的对偶问题的近似解 $\alpha^*$
+
+1. 取初值 $\alpha^{(0)} = 0, k = 0$
+
+2. 选取优化变量 $\alpha^{(k)}_1, \alpha^{(k)}_2$，解析求解两个变量的最优化问题，得到最优解$\alpha^{(k+1)}_1, \alpha^{(k+1)}_2$ 并更新 $\alpha, w, b$ 
+
+$$
+\min_{\alpha_1, \alpha_2} W(\alpha_1, \alpha_2) = \frac{1}{2}K_{11}\alpha_1^2 + \frac{1}{2}K_{22}\alpha_2^2 + y_1y_2K_{12}\alpha_1\alpha_2 - (\alpha_1 + \alpha_2)+y_1\alpha_1\sum_{i = 3}^Ny_i\alpha_iK_{i1} + y_2\alpha_2\sum_{i = 3}^Ny_i\alpha_iK_{i2} \\
+s.t. \alpha_1y_1+\alpha_2y_2 = \sum_{i = 3}^Ny_i\alpha_i \\
+0\leq \alpha_i \leq C, i = 1,2
+$$
+
+3. 若在精度 $\epsilon$ 范围内所有点满足 KKT 条件，则结束迭代，否则跳转至 2 进行下一次迭代优化。
+
+##### 算法具体实现过程中遇到的难点
+
+* 迭代过程中如何选择优化变量$\alpha_1, \alpha_2$。
+
+个人认为，这是 SMO 算法最为重要也是最难的地方。
+
+对于第一个点，首先考虑到要是得对偶问题的解与原始问题的解等价，优化的方向应该为使得不满足 KKT 条件的点变得满足的方向，所以第一个点要是不满足 KKT 条件的，而且按道理讲选择最不满足 KKT 的支持向量进行优化是最优解。但是实际实现过程中由于不满足的点太多了，要进行排序开销过大。故采用先从不满足 KKT 的支持向量里选择一个点，如果没有则从剩下不满足 KKT 条件的点中进行选择。
+
+而对于第二个点，根据对优化变量的最优化问题的求解，得到 $\alpha_{2\_new} - \alpha_{2\_old}$ 的大小与 $|E_1 - E_2|$ 成正相关（其中 $E_i$ 表示第 i 个点模型预测值与实际值之间的误差）。所以第二个点的选择策略为若 $E_1$ 为正，则选择最小的 $E_i$ 对应的点作为第二个点，若 $E_1$ 为负，则选择最大的 $E_i$ 作为第二个点。
+
+**但在实际实现过程中**，发现按照这个标准来选择的两个点，优化后的值可能与之前是一样的或者对目标函数带来的下降不够大，所以对于这种失败的选点，采取先随机选取第二个点，在重选第二个点超过一定次数之后，如果仍没有成功选到点，则重新选择第一个点。
+
+* 迭代次数的增加并不一定能使得模型在训练集上的表现增加，以及模型难以拟合（即所有点满足 KKT）。
+
+在实际实现过程中，发现随着迭代次数的增加，由于选点的时候保证了新选出来的点能够给目标函数带来下降这一条件，所以迭代次数增多，对偶问题的值确实是不断下降的，但是发现满足 KKT 条件的点数并没有随之增多，在大多数情况下，满足 KKT 条件的点的数目反而下降了，这是特别要命的。
+
+对此，并没有想出很好的解决方案，只是采用了让模型记住迭代过程中出现的最优解对应的 w, b 值，而这个最优解的判断策略就是，对偶问题的目标函数有下降而且满足 KKT 点的数目增加或者保持不变。
+
+##### SMO SVM 模型在测试集上的表现
+
+经个人提交测试，在最大迭代次数设置 2000 （选择 2000 次点去更新 w, b），精度为 0.1 的情况下，表现如下：
+
+![1575105142253](C:\Users\power\AppData\Roaming\Typora\typora-user-images\1575105142253.png)
+
+而对应的调用 sklearn.svm.LinearSVC 模型跑出来的分数为：
+
+![1575105243030](C:\Users\power\AppData\Roaming\Typora\typora-user-images\1575105243030.png)
+
+总体来说，模型的表现还是可以接受的。
+
+## 梯度提升树
+
+在得知可以调用 sklearn 包内的现有模型之后，采用了 GradientBoostingClassifier 模型来进行预测，下面介绍一下梯度提升树的算法。这部分的脚本文件为 gbt.py。
+
+##### 算法介绍
+
+梯度提升树是提升集成学习方法的一种应用。而提升集成学习的思想是训练一组弱学习器，后一个学习器努力去学习前一个学习器没有学好的部分，最终的预测结果由各个学习器的结果投票得出。
+
+具体实现上，梯度提升树的弱学习器是决策树。而其让后一个学习器去学习前一个学习没学好的部分的做法对于平方损失函数是，求得上一个学习器的残差，然后让下一个学习器去拟合这个残差（感觉比较像专门做回归的，不过也可以用来做分类）。而对于更一般的损失函数，采用损失函数的负梯度在上一个学习器上的值作为残差的近似值，去拟合一下个回归树。
+
+所以，对于二分类问题，选择对数似然损失函数作为模型的损失函数，表示为 $L(y, f(x)) = log(1 + e^{-yf(x)})$。
+
+则**梯度提升树的算法**如下：
+
+输入：训练数据集 $T = \{(x_1, y_1), (x_2, y_2), ...., (x_N, y_N)\}$ ，其中 x 为 n 维特征向量，y 为 1 或者 -1，对数似然损失函数记为 $L(y, f(x)) $， 要训练的弱分类器的个数 M。
+
+输出：集成的强学习器 $f(x)$
+
+1. 初始化弱学习分类器为 $$f_0(x) = mode(y)$$ 即初始化为标签中的众数。
+
+2. 对于 m = 1,2,3,... M
+
+* 对样本 $y_1, y_2, y_3 ... y_N$ 计算损失函数负梯度的值
+
+$$
+r_{mi} = - [\frac{\partial L(y_i, f_{m-1}(x_i))}{\part f(x_i)}] = \frac{y_i}{1 + e^{y_if_{m-1}(x_i)}}
+$$
+
+   * 将上一步计算得到的 $(x_i, r_{mi})$ 作为输入样本拟合得到第 m 棵的回归树，并求得其每一个叶子节点对应的样本集合 $R_{mj}, j = 1,2,3...J$ 其中 $J$ 为第 m 棵回归树的叶子节点的个数。
+
+   * 对上一步计算到的每一个子节点的样本集合用以下方式来确定该叶子节点的输出 $c_{mj}$
+
+$$
+\begin{aligned}
+c_{mj} &= arg \min_{c} \sum_{x_i \in R_{mj}} L(y_i, f_{m-1}(x_i) + c) \\
+&= arg \min_{c} \sum_{x_i \in R_{mj}} log(1 + e^{-y_i(f_{m-1}(x) + c)}) \\
+&\approx \frac{\sum_{x_i \in R_{mj}} r_{mi}}{\sum_{x_i \in R_{mj}} |r_{mj}|(1-|r_{mj}|)}
+\end{aligned}
+$$
+
+   * 更新 $f_m(x) = f_{m-1}(x) + \sum_{j = 1}^J c_{mj}I(x \in R_{mj}) $ ，其中 $I(x \in R_{mj})$ 当 $x \in R_{mj}$ 时为 1，否则为 0。
+
+3. 得到最终的强学习器，即 m 个回归树的加法结合。
+
+$$
+f(x) = \sum_{m = 1}^M \sum_{j = 1}^J c_{mj}I(x \in R_{mj})
+$$
+
+##### 模型得分
+
+与 SVM 相同的数据输入，仅仅设置了最大学习器数目为 500 以及用五折交叉验证，最终预测集得分如下。
+
+![1575120669431](C:\Users\power\AppData\Roaming\Typora\typora-user-images\1575120669431.png)
 
